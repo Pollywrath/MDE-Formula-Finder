@@ -36,20 +36,6 @@ npm run dev
 
 Open your browser to `http://localhost:3000`
 
-### Build
-
-Build for production:
-
-```bash
-npm run build
-```
-
-### Deploy to GitHub Pages
-
-```bash
-npm run deploy
-```
-
 ## How to Use
 
 1. **Load Your Data**:
