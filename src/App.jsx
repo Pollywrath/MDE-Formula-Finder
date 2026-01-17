@@ -22,7 +22,8 @@ const App = () => {
     linearC: 0.14,
     linearM: 1.0,
     linearE: 0.0,
-    thresholdFactor: 0.06
+    thresholdBase: 0.06,
+    thresholdExp: 1.0
   });
 
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -96,11 +97,10 @@ const App = () => {
   const calcFuel = (t, r, c, p) => {
     const fuelPerCyl = calcFuelPerCylinder(c);
     const powerMultiplier = p.powerA * Math.pow(t, p.powerN) / Math.pow(r, p.powerM);
-    const powerValue = powerMultiplier * fuelPerCyl;
-    const scaledThreshold = p.thresholdFactor * c;
+    const threshold = p.thresholdBase * Math.pow(c, p.thresholdExp);
     
-    if (powerValue <= scaledThreshold) {
-      return powerValue;
+    if (powerMultiplier <= threshold) {
+      return powerMultiplier * fuelPerCyl;
     } else {
       const linearMultiplier = p.linearC * t / Math.pow(r, p.linearM) + p.linearE;
       return linearMultiplier * fuelPerCyl;
@@ -168,7 +168,8 @@ const App = () => {
       linearC: 0.05 + Math.random() * 0.3,
       linearM: 0.5 + Math.random() * 2,
       linearE: -0.1 + Math.random() * 0.2,
-      thresholdFactor: 0.01 + Math.random() * 0.2
+      thresholdBase: 0.01 + Math.random() * 0.2,
+      thresholdExp: -0.5 + Math.random() * 1.5
     });
   };
 
@@ -199,7 +200,8 @@ const App = () => {
         linearC: currentParams.linearC * (0.3 + Math.random() * 1.4),
         linearM: currentParams.linearM * (0.7 + Math.random() * 0.6),
         linearE: currentParams.linearE + (Math.random() - 0.5) * 0.2,
-        thresholdFactor: currentParams.thresholdFactor * (0.5 + Math.random() * 1.0)
+        thresholdBase: currentParams.thresholdBase * (0.5 + Math.random() * 1.0),
+        thresholdExp: currentParams.thresholdExp * (0.5 + Math.random() * 1.0)
       };
       
       pop.push(ind);
@@ -251,7 +253,10 @@ const App = () => {
           trial.linearE = Math.max(-1, Math.min(1, currentPop[a].linearE + F * (currentPop[b].linearE - currentPop[c].linearE)));
         }
         if (Math.random() < CR) {
-          trial.thresholdFactor = Math.max(0.001, Math.min(0.5, currentPop[a].thresholdFactor + F * (currentPop[b].thresholdFactor - currentPop[c].thresholdFactor)));
+          trial.thresholdBase = Math.max(0.001, Math.min(1, currentPop[a].thresholdBase + F * (currentPop[b].thresholdBase - currentPop[c].thresholdBase)));
+        }
+        if (Math.random() < CR) {
+          trial.thresholdExp = Math.max(-2, Math.min(2, currentPop[a].thresholdExp + F * (currentPop[b].thresholdExp - currentPop[c].thresholdExp)));
         }
         
         const trialFit = calcFitness(trial, activeData);
@@ -451,14 +456,13 @@ const App = () => {
   
   // Piecewise multiplier
   const powerMultiplier = ${p.powerA.toExponential(15)} * Math.pow(t, ${p.powerN.toExponential(15)}) / Math.pow(r, ${p.powerM.toExponential(15)});
-  const powerValue = powerMultiplier * fuelPerCyl;
-  const scaledThreshold = ${p.thresholdFactor.toExponential(15)} * c;
+  const threshold = ${p.thresholdBase.toExponential(15)} * Math.pow(c, ${p.thresholdExp.toExponential(15)});
   
-  if (powerValue > scaledThreshold) {
+  if (powerMultiplier > threshold) {
     const linearMultiplier = ${p.linearC.toExponential(15)} * t / Math.pow(r, ${p.linearM.toExponential(15)}) + ${p.linearE.toExponential(15)};
     return linearMultiplier * fuelPerCyl;
   } else {
-    return powerValue;
+    return powerMultiplier * fuelPerCyl;
   }
 }
 
