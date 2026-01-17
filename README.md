@@ -1,6 +1,6 @@
 # MDE Formula Finder
 
-A powerful mathematical formula discovery tool using Modified Differential Evolution (MDE) algorithm to optimize function parameters against datasets. Built with React, Vite, and Recharts.
+A powerful mathematical formula discovery tool using Differential Evolution algorithm to optimize function parameters against datasets. Built with React, Vite, and Recharts.
 
 ## Features
 
