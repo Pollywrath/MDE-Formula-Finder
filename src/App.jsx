@@ -20,10 +20,7 @@ const App = () => {
     powerN: 3.0,
     powerM: 3.0,
     linearC: 0.14,
-    linearM: 1.0,
-    linearE: 0.0,
-    thresholdBase: 0.06,
-    thresholdExp: 1.0
+    linearM: 1.0
   });
 
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -35,6 +32,8 @@ const App = () => {
   const [maxGens, setMaxGens] = useState(0);
   const [log, setLog] = useState([]);
   const [showAllErrors, setShowAllErrors] = useState(false);
+  const [stuckCounter, setStuckCounter] = useState(0);
+  const [lastImprovement, setLastImprovement] = useState(0);
   
   const intervalRef = useRef(null);
   const fileRef = useRef(null);
@@ -97,12 +96,20 @@ const App = () => {
   const calcFuel = (t, r, c, p) => {
     const fuelPerCyl = calcFuelPerCylinder(c);
     const powerMultiplier = p.powerA * Math.pow(t, p.powerN) / Math.pow(r, p.powerM);
-    const threshold = p.thresholdBase * Math.pow(c, p.thresholdExp);
+    const powerFuel = powerMultiplier * fuelPerCyl;
     
-    if (powerMultiplier <= threshold) {
-      return powerMultiplier * fuelPerCyl;
+    // Threshold is the fuel usage at R14 T100 for this cylinder count
+    const thresholdMultiplier = p.powerA * Math.pow(100, p.powerN) / Math.pow(14, p.powerM);
+    const thresholdFuel = thresholdMultiplier * fuelPerCyl;
+    
+    if (powerFuel < thresholdFuel) {
+      return powerFuel;
     } else {
-      const linearMultiplier = p.linearC * t / Math.pow(r, p.linearM) + p.linearE;
+      // Find the throttle value where transition happens for this ratio
+      const tThreshold = Math.pow((thresholdMultiplier * Math.pow(r, p.powerM)) / p.powerA, 1 / p.powerN);
+      // Calculate linearE at the threshold point for continuity
+      const linearE = thresholdMultiplier - p.linearC * tThreshold / Math.pow(r, p.linearM);
+      const linearMultiplier = p.linearC * t / Math.pow(r, p.linearM) + linearE;
       return linearMultiplier * fuelPerCyl;
     }
   };
@@ -166,10 +173,7 @@ const App = () => {
       powerN: 2 + Math.random() * 2,
       powerM: 2 + Math.random() * 2,
       linearC: 0.05 + Math.random() * 0.3,
-      linearM: 0.5 + Math.random() * 2,
-      linearE: -0.1 + Math.random() * 0.2,
-      thresholdBase: 0.01 + Math.random() * 0.2,
-      thresholdExp: -0.5 + Math.random() * 1.5
+      linearM: 0.5 + Math.random() * 2
     });
   };
 
@@ -198,10 +202,7 @@ const App = () => {
         powerN: currentParams.powerN * (0.8 + Math.random() * 0.4),
         powerM: currentParams.powerM * (0.8 + Math.random() * 0.4),
         linearC: currentParams.linearC * (0.3 + Math.random() * 1.4),
-        linearM: currentParams.linearM * (0.7 + Math.random() * 0.6),
-        linearE: currentParams.linearE + (Math.random() - 0.5) * 0.2,
-        thresholdBase: currentParams.thresholdBase * (0.5 + Math.random() * 1.0),
-        thresholdExp: currentParams.thresholdExp * (0.5 + Math.random() * 1.0)
+        linearM: currentParams.linearM * (0.7 + Math.random() * 0.6)
       };
       
       pop.push(ind);
@@ -216,6 +217,7 @@ const App = () => {
     let currentFit = fit;
     let currentBest = initBest;
     let gen = 0;
+    let gensSinceImprovement = 0;
     
     intervalRef.current = setInterval(() => {
       const N = currentPop.length;
@@ -249,15 +251,6 @@ const App = () => {
         if (Math.random() < CR) {
           trial.linearM = Math.max(0.1, Math.min(5, currentPop[a].linearM + F * (currentPop[b].linearM - currentPop[c].linearM)));
         }
-        if (Math.random() < CR) {
-          trial.linearE = Math.max(-1, Math.min(1, currentPop[a].linearE + F * (currentPop[b].linearE - currentPop[c].linearE)));
-        }
-        if (Math.random() < CR) {
-          trial.thresholdBase = Math.max(0.001, Math.min(1, currentPop[a].thresholdBase + F * (currentPop[b].thresholdBase - currentPop[c].thresholdBase)));
-        }
-        if (Math.random() < CR) {
-          trial.thresholdExp = Math.max(-2, Math.min(2, currentPop[a].thresholdExp + F * (currentPop[b].thresholdExp - currentPop[c].thresholdExp)));
-        }
         
         const trialFit = calcFitness(trial, activeData);
         if (trialFit < currentFit[i]) {
@@ -282,6 +275,34 @@ const App = () => {
         setParams({...newPop[bestIdx]});
         
         addLog(`✓ Gen ${gen}: ${newBest.toFixed(3)}%`);
+        gensSinceImprovement = 0;
+      } else {
+        gensSinceImprovement++;
+      }
+      
+      setStuckCounter(gensSinceImprovement);
+      
+      // Escape local minima: inject diversity if stuck for 500 generations
+      if (gensSinceImprovement >= 500 && gensSinceImprovement % 500 === 0) {
+        addLog(`⚠ Stuck for ${gensSinceImprovement} gens, injecting diversity...`);
+        
+        // Keep best 20%, randomize rest 80%
+        const sortedIndices = newFit.map((f, i) => ({f, i})).sort((a, b) => a.f - b.f);
+        const keepCount = Math.floor(N * 0.2);
+        
+        for (let i = keepCount; i < N; i++) {
+          const idx = sortedIndices[i].i;
+          const best = newPop[bestIdx];
+          
+          newPop[idx] = {
+            powerA: best.powerA * (0.1 + Math.random() * 1.8),
+            powerN: best.powerN * (0.7 + Math.random() * 0.6),
+            powerM: best.powerM * (0.7 + Math.random() * 0.6),
+            linearC: best.linearC * (0.3 + Math.random() * 1.4),
+            linearM: best.linearM * (0.5 + Math.random() * 1.0)
+          };
+          newFit[idx] = calcFitness(newPop[idx], activeData);
+        }
       }
       
       gen++;
@@ -309,6 +330,8 @@ const App = () => {
     } else {
       setGeneration(0);
       setBestFitness(Infinity);
+      setStuckCounter(0);
+      setLastImprovement(0);
       setIsOptimizing(true);
       setTimeout(startOptimization, 100);
     }
@@ -456,13 +479,19 @@ const App = () => {
   
   // Piecewise multiplier
   const powerMultiplier = ${p.powerA.toExponential(15)} * Math.pow(t, ${p.powerN.toExponential(15)}) / Math.pow(r, ${p.powerM.toExponential(15)});
-  const threshold = ${p.thresholdBase.toExponential(15)} * Math.pow(c, ${p.thresholdExp.toExponential(15)});
+  const powerFuel = powerMultiplier * fuelPerCyl;
   
-  if (powerMultiplier > threshold) {
-    const linearMultiplier = ${p.linearC.toExponential(15)} * t / Math.pow(r, ${p.linearM.toExponential(15)}) + ${p.linearE.toExponential(15)};
+  // Threshold is the fuel usage at R14 T100 for this cylinder count
+  const thresholdMultiplier = ${p.powerA.toExponential(15)} * Math.pow(100, ${p.powerN.toExponential(15)}) / Math.pow(14, ${p.powerM.toExponential(15)});
+  const thresholdFuel = thresholdMultiplier * fuelPerCyl;
+  
+  if (powerFuel > thresholdFuel) {
+    const tThreshold = Math.pow((thresholdMultiplier * Math.pow(r, ${p.powerM.toExponential(15)})) / ${p.powerA.toExponential(15)}, 1 / ${p.powerN.toExponential(15)});
+    const linearE = thresholdMultiplier - ${p.linearC.toExponential(15)} * tThreshold / Math.pow(r, ${p.linearM.toExponential(15)});
+    const linearMultiplier = ${p.linearC.toExponential(15)} * t / Math.pow(r, ${p.linearM.toExponential(15)}) + linearE;
     return linearMultiplier * fuelPerCyl;
   } else {
-    return powerMultiplier * fuelPerCyl;
+    return powerFuel;
   }
 }
 
@@ -558,7 +587,7 @@ const App = () => {
             
             {isOptimizing && (
               <p className="de-status">
-                Gen {generation} | Fitness: {bestFitness.toFixed(3)}%
+                Gen {generation} | Fitness: {bestFitness.toFixed(3)}% | Stuck: {stuckCounter}
               </p>
             )}
           </div>
@@ -618,13 +647,26 @@ const App = () => {
                   disabled={isOptimizing}
                 />
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   onClick={randomizeParams}
                   className="btn btn-orange"
                   disabled={isOptimizing}
+                  style={{ flex: 1 }}
                 >
                   🎲 Randomize
+                </button>
+                <button
+                  onClick={() => {
+                    setStuckCounter(0);
+                    setLastImprovement(generation);
+                    addLog('🔄 Diversity injected manually');
+                  }}
+                  className="btn btn-purple"
+                  disabled={!isOptimizing}
+                  style={{ flex: 1 }}
+                >
+                  💥 Boost
                 </button>
               </div>
             </div>
