@@ -27,8 +27,8 @@ const App = () => {
   const [generation, setGeneration] = useState(0);
   const [bestFitness, setBestFitness] = useState(Infinity);
   const [popSize, setPopSize] = useState(100);
-  const [F, setF] = useState(0.4);
-  const [CR, setCR] = useState(0.5);
+  const [F, setF] = useState(0.5);
+  const [CR, setCR] = useState(0.7);
   const [maxGens, setMaxGens] = useState(0);
   const [log, setLog] = useState([]);
   const [showAllErrors, setShowAllErrors] = useState(false);
@@ -199,8 +199,8 @@ const App = () => {
     for (let i = 1; i < popSize; i++) {
       const ind = {
         powerA: currentParams.powerA * (0.3 + Math.random() * 1.4),
-        powerN: currentParams.powerN * (0.8 + Math.random() * 0.4),
-        powerM: currentParams.powerM * (0.8 + Math.random() * 0.4),
+        powerN: currentParams.powerN * (0.5 + Math.random() * 1.0),
+        powerM: currentParams.powerM * (0.5 + Math.random() * 1.0),
         linearC: currentParams.linearC * (0.3 + Math.random() * 1.4),
         linearM: currentParams.linearM * (0.7 + Math.random() * 0.6)
       };
@@ -282,8 +282,8 @@ const App = () => {
       
       setStuckCounter(gensSinceImprovement);
       
-      // Escape local minima: inject diversity if stuck for 500 generations
-      if (gensSinceImprovement >= 500 && gensSinceImprovement % 500 === 0) {
+      // Escape local minima: inject diversity if stuck for 300 generations
+      if (gensSinceImprovement >= 300 && gensSinceImprovement % 300 === 0) {
         addLog(`⚠ Stuck for ${gensSinceImprovement} gens, injecting diversity...`);
         
         // Keep best 20%, randomize rest 80%
@@ -296,8 +296,8 @@ const App = () => {
           
           newPop[idx] = {
             powerA: best.powerA * (0.1 + Math.random() * 1.8),
-            powerN: best.powerN * (0.7 + Math.random() * 0.6),
-            powerM: best.powerM * (0.7 + Math.random() * 0.6),
+            powerN: best.powerN * (0.4 + Math.random() * 1.2),
+            powerM: best.powerM * (0.4 + Math.random() * 1.2),
             linearC: best.linearC * (0.3 + Math.random() * 1.4),
             linearM: best.linearM * (0.5 + Math.random() * 1.0)
           };
